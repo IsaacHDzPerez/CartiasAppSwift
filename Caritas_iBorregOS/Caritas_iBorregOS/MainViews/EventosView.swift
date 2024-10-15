@@ -14,13 +14,13 @@ struct EventosView: View {
         NavigationStack {
             ScrollView {
                 VStack {
+                    
                     // Titulo
                     Text("Eventos")
                         .font(.system(size: 35))
                         .bold()
                         .foregroundColor(darkBlueC)
                         .padding(.bottom, 20)
-                    
                     // Si se obtuvieron los eventos, renderizar cartas
                     if !events.isEmpty {
                         VStack(spacing: 15) {
@@ -46,6 +46,7 @@ struct EventosView: View {
                 }
                 .padding()
                 .onAppear {
+                    
                     // Cuando aparezca nuestro view, hacer el fetch de eventos
                     Task {
                         do {

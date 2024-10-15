@@ -15,6 +15,20 @@ enum APIError: Error {
     case serverError(String)
 }
 
+// Define the response structure
+struct AttendanceResponse: Codable {
+    let asistio: Bool?
+    let error: String?
+}
+
+struct AttendanceRequest: Codable {
+    let usuario_id: Int
+    let evento_id: Int
+    let event_name: String
+    let event_code: String
+}
+
+
 import Foundation
 
 // Convertir valores numericos del evento a string para renderizar
@@ -43,7 +57,7 @@ func fixNumericFieldsInJSON(_ data: Data) throws -> Data {
 // Funcion para manejar ruta que obtiene un evento individual
 func fetchEvent(eventID: Int) async throws -> EVENTOS {
     // Construct the URL
-    guard let url = URL(string: "https://a00835641.tc2007b.tec.mx:10201/event/\(eventID)") else {
+    guard let url = URL(string: "\(urlEndpoint)/event/\(eventID)") else {
         throw APIError.invalidURL
     }
     
@@ -96,7 +110,7 @@ func fetchEvent(eventID: Int) async throws -> EVENTOS {
 
 // Funcion que obtiene todos los eventos
 func fetchEvents() async throws -> [EVENTOS] {
-    guard let url = URL(string: "https://a00835641.tc2007b.tec.mx:10201/all-events") else {
+    guard let url = URL(string: "\(urlEndpoint)/all-events") else {
         throw URLError(.badURL)
     }
 
@@ -141,6 +155,140 @@ func formattedDate(_ date: Date) -> String {
         dateFormatter.timeStyle = .none
         return dateFormatter.string(from: date)
     }
+
+func checkAttendance(usuarioID: Int, eventoID: Int) async throws -> Bool? {
+    let urlString = "\(urlEndpoint)/get-attendance-events/\(usuarioID)/\(eventoID)"
+    print("Attempting to fetch attendance with URL: \(urlString)")  // Print the URL
+    
+    guard let url = URL(string: urlString) else {
+        throw URLError(.badURL)
+    }
+
+    do {
+        let (data, _) = try await URLSession.shared.data(from: url)
+        print("Received data: \(String(data: data, encoding: .utf8) ?? "No data")")  // Print raw data
+        
+        let attendanceResponse = try JSONDecoder().decode(AttendanceResponse.self, from: data)
+        print("Decoded response: \(attendanceResponse)")
+
+        // Return the value of 'asistio', or nil if the user is not registered
+        if let asistio = attendanceResponse.asistio {
+            print("User attendance status: \(asistio)")
+            return asistio
+        } else if let errorMessage = attendanceResponse.error, errorMessage == "Not registered" {
+            print("User is not registered")
+            return nil  // User is not registered, so return nil
+        } else {
+            throw URLError(.badServerResponse)
+        }
+    } catch {
+        print("Error fetching attendance: \(error.localizedDescription)")
+        throw error
+    }
+}
+
+func registerAttendance(usuarioID: Int, eventoID: Int) async throws -> Bool {
+    let urlString = "\(urlEndpoint)/register-event-attendance"
+    print("Attempting to register attendance with URL: \(urlString)")  // Print the URL
+    
+    guard let url = URL(string: urlString) else {
+        throw URLError(.badURL)
+    }
+    
+    // Prepare the request body
+    let requestBody: [String: Any] = [
+        "usuario_id": usuarioID,
+        "evento_id": eventoID
+    ]
+    
+    // Serialize the request body to JSON data
+    let jsonData = try JSONSerialization.data(withJSONObject: requestBody, options: [])
+
+    // Prepare the URL request
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = jsonData
+
+    // Execute the network request
+    do {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // Check the HTTP response status
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("No valid response from the server.")
+            throw URLError(.badServerResponse)
+        }
+        
+        // Handle different HTTP status codes
+        switch httpResponse.statusCode {
+        case 201:
+            print("Attendance registered successfully.")
+            return true
+        case 200:
+            print("User already registered for this event.")
+            return false  // User is already registered
+        default:
+            print("Failed to register attendance. Server response: \(httpResponse.statusCode)")
+            throw URLError(.badServerResponse)
+        }
+        
+    } catch {
+        print("Error during registration: \(error.localizedDescription)")
+        throw error
+    }
+}
+
+func registerEventCompletion(attendance: AttendanceRequest, completion: @escaping (Result<String, Error>) -> Void) {
+    // Create the URL
+    guard let url = URL(string: "\(urlEndpoint)/register-event-completion") else {
+        completion(.failure(NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+        return
+    }
+    
+    // Create the request
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+    
+    // Encode the attendance request to JSON
+    do {
+        let jsonData = try JSONEncoder().encode(attendance)
+        request.httpBody = jsonData
+    } catch {
+        completion(.failure(error))
+        return
+    }
+    
+    // Perform the request
+    let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        // Handle network or other errors
+        if let error = error {
+            completion(.failure(error))
+            return
+        }
+        
+        // Ensure we received a proper response
+        guard let httpResponse = response as? HTTPURLResponse else {
+            completion(.failure(NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])))
+            return
+        }
+        
+        // Handle the different status codes from the API
+        switch httpResponse.statusCode {
+        case 200, 201:
+            completion(.success("Attendance registered successfully"))
+        case 400:
+            completion(.failure(NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid input data or event code"])))
+        case 404:
+            completion(.failure(NSError(domain: "", code: 404, userInfo: [NSLocalizedDescriptionKey: "Event not found"])))
+        default:
+            completion(.failure(NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server error"])))
+        }
+    }
+    
+    task.resume()  // Start the request
+}
 
 let exampleEvent = EVENTOS(
     ID_EVENTO: 1,

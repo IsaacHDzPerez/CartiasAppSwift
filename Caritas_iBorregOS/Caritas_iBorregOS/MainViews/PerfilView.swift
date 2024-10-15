@@ -8,187 +8,119 @@
 import SwiftUI
 import Charts
 
-var graphData = [
-    PesoPorMes(month: "Mayo", weight: 55.5),
-    PesoPorMes(month: "Jun", weight: 80.5),
-    PesoPorMes(month: "Jul", weight: 57.1),
-    PesoPorMes(month: "Ago", weight: 62.5),
-]
+//User
+let myUser = USUARIOS(ID_USUARIO: 1, NOMBRE: "", A_PATERNO: "", A_MATERNO: "", ID_TIPO_USUARIO: 1, EMAIL: "", CONTRASENA: "")
+
+// let miPerfil = getUsuario(email: "juan.perez@example.com")
+var miPerfil = USUARIOS(ID_USUARIO: 1, NOMBRE: "", A_PATERNO: "", A_MATERNO: "", ID_TIPO_USUARIO: 1, EMAIL: "", CONTRASENA: "")
 
 struct PerfilView: View {
-    @State private var user: String = "María Martínez"
+    let userID = UserDefaults.standard.integer(forKey: "usuario_id")
     @State private var notification: Bool = false
-    @State private var progress: Double = 0.2 // Current progress (99%)
-    
-    @State private var usuario: USUARIOS?
+    @State private var retosCompletados: RetosCompletados =  RetosCompletados(CompletedRetos: 1, TotalRetos: 1)
+    @State private var chartsData: Array<DATOS_FISICOS> = getDatosFisicos(userID: UserDefaults.standard.integer(forKey: "usuario_id"))
     @State private var errorMessage: String?
-    
     var body: some View {
-        
-        //Overlaping things
-        ZStack{
-            
-            //Green background
-            VStack {
-                
-                // Notifications and rewards buttons
-                HStack {
-                    Button{
-                        notification = true
-                    }label:{
-                        Image(systemName: "bell.fill")
-                            .resizable()
-                            .frame(width: 45, height: 50)
-                            .foregroundStyle(orangeC)
-                    }
-                    .alert(isPresented: $notification, content: {
-                        Alert( title: Text("¡Felicidades!"), message: Text("Completaste el reto: Caminata en Chipinque 🏃"), dismissButton: .default(Text("Volver")))
-                    })
-                    Spacer()
-                    Button{
-                        notification = true
-                    }label:{
-                        Image(systemName: "gift")
-                            .resizable()
-                            .frame(width: 50, height: 50)
-                            .foregroundStyle(pinkC)
-                    }
-                    .alert(isPresented: $notification, content: {
-                        Alert( title: Text("¡Felicidades!"), message: Text("Completaste el reto: Caminata en Chipinque 🏃"), dismissButton: .default(Text("Volver")))
-                    })
-                }
-                .padding(.horizontal, 15)
-                HStack {Spacer()}
-                Spacer()
-            }
-            .padding()
-            .background(lightGreenC)
-            
-            //White card content
-            ScrollView(.vertical,showsIndicators: false) {
-                //Spacer to fill the screen
-                HStack {Spacer()}
-                
-                VStack{
-                    
-                    //Content in the white card
-                    Text(usuario?.NOMBRE ?? "SN")
-                        .foregroundStyle(blueC)
-                        .font(.system(size: 40))
-                        .bold()
-                    
-                    //Progress Bar with Reto text
-                    VStack(spacing: 20) {
-                        
-                        ZStack(alignment: .leading) {
-                            // Background Progress View
-                            ProgressView(value: progress)
-                                .progressViewStyle(LinearProgressViewStyle(tint: orangeC))
-                                .scaleEffect(x: 1, y: 3, anchor: .center) // Make the progress bar thicker
-                                .padding(.horizontal)
-                            
-                            // Runner Icon and Percentage Overlay
-                            GeometryReader { geometry in
-                                let iconSize: CGFloat = 30
-                                let textWidth: CGFloat = 40 // Estimated width of the percentage text
-                                let progressOffset = CGFloat(progress) * (geometry.size.width - iconSize - textWidth)
-                                
-                                HStack(spacing: 5) {
-                                    Spacer()
-                                        .frame(width: progressOffset) // Adjust the width to move the icon
-                                    
-                                    VStack(spacing: 0) {
-                                        Text("\(Int(progress * 100))%")
-                                            .font(.system(size: 18, weight: .bold))
-                                            .foregroundColor(blueC)
-                                        
-                                        Image(systemName: "figure.run.circle.fill")
-                                            .resizable()
-                                            .frame(width: iconSize, height: iconSize)
-                                            .foregroundColor(blueC)
-                                    }
-                                    .offset(y: -40) // Position icon and text above the progress bar
-                                    
-                                    Spacer() // Push the content to the start of the progress
-                                }
-                                
+        let progress = Double(retosCompletados.CompletedRetos) / Double(retosCompletados.TotalRetos)
+        let recentWeight = chartsData.first?.PESO ?? 0
+        let recentHeight = chartsData.first?.ALTURA ?? 0
+        let pesos = chartsData.map { $0.PESO }
+        let fechas = chartsData.map { $0.FECHA_ACTUALIZACION }
+        let BMIs = chartsData.map { $0.IMC }
+        let inGlus = chartsData.map { $0.GLUCOSA }
+        let pesoColor = Color(red: 0, green: 112/255, blue: 66/255)
+        let bmiColor = chartC
+        let inGlusColor = Color(red: 206/255, green: 111/255, blue: 0)
+        NavigationStack{
+            ScrollView{
+                ZStack{
+                    //Green background
+                    VStack(alignment: .center) {
+                        // Notifications and rewards buttons
+                        HStack {
+                            NavigationLink{
+                                HistorialView()
+                            }label:{
+                                Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                                    .resizable()
+                                    .frame(width: 50, height: 45)
+                                    .foregroundStyle(orangeC)
                             }
-                            
-                            .padding(.horizontal)
-                        }
-                        
-                        Text("Reto: ")
-                            .bold()
-                        + Text("Yoga mensual 🧘")
-                            .foregroundStyle(pinkC)
-                    }
-                    .frame(height: 50)
-                    .padding()
-                    
-                    // Weight and height cards
-                    PesoAlturaView()
-                    
-                    //Charts
-                    VStack (alignment: .leading){
-                        Text("Tu progreso 🏃‍➡️")
-                            .font(.title)
-                            .bold()
-                            .foregroundStyle(chartC)
-                        Chart{
-                            ForEach(graphData) { d in
-                                BarMark(
-                                    x: PlottableValue.value("Mes",d.month), y: PlottableValue.value("Peso", d.weight))
-                                .foregroundStyle(chartC)
-                                .annotation{
-                                    Text(String("\(d.weight) kg"))
-                                        .foregroundStyle(chartC)
-                                }
+                            .alert(isPresented: $notification, content: {
+                                Alert( title: Text("¡Felicidades!"), message: Text("Completaste el reto: Caminata en Chipinque 🏃"), dismissButton: .default(Text("Volver")))
+                            })
+                            Spacer()
+                            NavigationLink{
+                                PremiosView()
+                            }label:{
+                                Image(systemName: "gift")
+                                    .resizable()
+                                    .frame(width: 45, height: 45)
+                                    .foregroundStyle(pinkC)
                             }
-                            
+                            .alert(isPresented: $notification, content: {
+                                Alert( title: Text("¡Felicidades!"), message: Text("Completaste el reto: Caminata en Chipinque 🏃"), dismissButton: .default(Text("Volver")))
+                            })
                         }
-                        .chartYAxis {
-                            AxisMarks(stroke: StrokeStyle(lineWidth: 0))
-                        }
-                        .chartYAxis(.hidden)
-                        .chartXAxis {
-                            AxisMarks(stroke: StrokeStyle(lineWidth: 0))
-                        }
-                        .frame(height: 200)
-                        .padding()
+                        .padding(.horizontal, 15)
+                        HStack {Spacer()}
+                        Spacer()
                     }
                     .padding()
-                    .background(chartBackgroundC)
-                    .cornerRadius(10)
+                    .background(lightGreenC)
                     
+                    //White card content
+                    VStack{
+                        //Spacer to fill the screen
+                        HStack {Spacer()}
+                        
+                        VStack(alignment: .center){
+                            //Content in the white card
+                            let nombreUsuario = miPerfil.NOMBRE + " " + miPerfil.A_PATERNO + " " + miPerfil.A_MATERNO
+                            Text(nombreUsuario)
+                                .padding(.top, 15)
+                                .foregroundStyle(blueC)
+                                .font(.system(size: 40))
+                                .bold()
+                            
+                            //Retos completados
+                            RetosProgressView(progress: progress)
+                            // Weight and height cards
+                            PesoAlturaView(weightX: recentWeight, heightX: recentHeight)
+                            
+                            ChartView(graphDataX: pesos, graphDataY: fechas, unitsX: "kg", graphTitleX: "Peso 💪", chartColorX: pesoColor)
+                                .padding(.bottom, 10)
+                            ChartView(graphDataX: BMIs, graphDataY: fechas, unitsX: "kg/m²", graphTitleX: "IMC 🧩", chartColorX: bmiColor)
+                                .padding(.bottom, 10)
+                            ChartView(graphDataX: inGlus, graphDataY: fechas, unitsX: "mg/dl", graphTitleX: "Glucosa 🩸", chartColorX: inGlusColor)
+                                .padding(.bottom, 10)
+                        }
+                        .padding(.horizontal, 1)
+                        .padding(.vertical, 85)
+                        VStack {}
+                        .padding(25)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .background(lightTealC)
+                    .cornerRadius(50)
+                    .offset(y: 150)
+                    .shadow(color: Color.black.opacity(0.01), radius: 5, x: 0, y: 5)
+                    
+                    //Profile picture
+                    VStack {
+                        FotoView()
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 35)
+                            .frame(width: 250)
+                            .shadow(color: blueC,radius: 10)
+                        Spacer()
+                    }
                 }
-                .padding(.horizontal, 1)
-                .padding(.vertical, 85)
-                Spacer()
-            }
-            .padding()
-            .background(lightTealC)
-            .cornerRadius(50)
-            .offset(y: 150)
-            .shadow(color: Color.black.opacity(0.01), radius: 5, x: 0, y: 5)
-            
-            //Profile picture
-            VStack {
-                FotoView()
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 35)
-                    .frame(width: 250)
-                    .shadow(color: blueC,radius: 10)
-                Spacer()
-            }
-            
-        }
-        .onAppear{
-            Task {
-                do{
-                    let fetchUser = try await fetchUsuario(usuarioID: 1)
-                    usuario = fetchUser
-                } catch {
-                    errorMessage = "Error fetching user: \(error.localizedDescription)"
+                .onAppear {
+                    let usuarioEmail = UserDefaults.standard.string(forKey: "email")
+                    miPerfil = getUsuario(email: usuarioEmail ?? "sin email")
+                    retosCompletados = getRetosCompletados(usuarioID: UserDefaults.standard.integer(forKey: "usuario_id"))
                 }
             }
         }

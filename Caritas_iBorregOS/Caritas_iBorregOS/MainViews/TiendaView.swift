@@ -1,10 +1,3 @@
-//
-//  TiendaView.swift
-//  Caritas_iBorregOS
-//
-//  Created by Diego Torre on 28/08/24.
-//
-
 import SwiftUI
 
 struct TiendaView: View {
@@ -21,7 +14,9 @@ struct TiendaView: View {
 
     @State private var beneficios: [BENEFICIOS] = []
     @State private var errorMessage: String?
+    @State private var puntos: Int?
     @State private var path = NavigationPath()
+    @StateObject private var viewModel = VMTienda()
     
     struct AlertItem: Identifiable {
         let id = UUID()
@@ -33,15 +28,24 @@ struct TiendaView: View {
     
     var body: some View {
         NavigationStack {
-            VStack {
+            ScrollView {
                 HStack { Spacer() }
                 
                 HStack {
                     Spacer()
                     HStack {
+                        if puntos != nil{
+                            Text(String(puntos ?? 0))
+                                .foregroundColor(Color.white)
+                                .font(.system(size: 18, weight: .bold))
+                        } else {
+                            Text("...")
+                                .foregroundColor(Color.white)
+                                .font(.system(size: 18, weight: .bold))
+                        }
+                        
                         Image(systemName: "star.fill")
                             .foregroundColor(.yellow)
-                        Text("135")
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(whiteC)
                     }
@@ -58,7 +62,7 @@ struct TiendaView: View {
                     .foregroundColor(darkBlueC)
                     .padding(.bottom, 20)
 
-                ScrollView {
+                VStack {
                     VStack(spacing: 15) {
                         if !beneficios.isEmpty {
                             ForEach(beneficios) { beneficio in
@@ -87,10 +91,14 @@ struct TiendaView: View {
             .onAppear {
                 Task {
                     do {
-                        let fetchedBeneficios = try await fetchBeneficios()
+                        let fetchedBeneficios = try await viewModel.fetchBeneficios()
                         beneficios = fetchedBeneficios
+                        let userID = UserDefaults.standard.integer(forKey: "usuario_id")
+                        let userPoints: Int = try await (fetchUserTotalPoints(for: userID))
+                        print("User \(userID) Total Points: \(userPoints)")
+                        puntos = userPoints
                     } catch {
-                        errorMessage = "Failed to fetch events: \(error.localizedDescription)"
+                        errorMessage = "Failed to fetch beneficios: \(error.localizedDescription)"
                     }
                 }
             }
@@ -100,7 +108,6 @@ struct TiendaView: View {
         }
     }
 }
-
 #Preview {
     TiendaView()
 }

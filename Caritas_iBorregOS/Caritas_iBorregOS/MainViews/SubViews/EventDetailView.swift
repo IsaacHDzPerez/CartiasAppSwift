@@ -1,7 +1,11 @@
 import SwiftUI
+
 struct EventDetailView: View {
     var event: EVENTOS  // The EVENTOS object passed to this view
-    @State private var participa: Bool = false
+    @State private var participa: Bool? = nil
+    @State private var errorMessage: String? = nil  // For handling error messages
+    @State private var asistenciaModal = false  // Control for showing the modal
+    @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
         ZStack {
@@ -27,7 +31,7 @@ struct EventDetailView: View {
                 
                 // Event title and badge section
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack(alignment: .firstTextBaseline) {  // Usamos firstTextBaseline para alinear con el texto base
+                    HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Evento")
                                 .font(.system(size: 40))
@@ -123,10 +127,19 @@ struct EventDetailView: View {
                 
                 // Participation button at the bottom
                 VStack {
-                    if participa {
+                    if let participaUnwrapped = participa, participaUnwrapped {
+                        Text("Ya atendiste este evento!")
+                            .padding()
+                            .background(darkBlueC)  // Set background color
+                            .cornerRadius(15)         // Rounded corners
+                            .shadow(radius: 5)
+                            .foregroundColor(Color.white)
+                    } else if participa == false {
                         HStack {
-                            Button(action: {}) {
-                                Text("Registrar Asistencia")
+                            Button(action: {
+                                asistenciaModal = true
+                            }) {
+                                Text("Registrar")
                                     .bold()
                                     .frame(maxWidth: .infinity)
                                     .padding()
@@ -135,20 +148,30 @@ struct EventDetailView: View {
                                     .cornerRadius(10)
                                     .shadow(color: Color.black.opacity(0.5), radius: 2, x: 1, y: 1)
                             }
-                            
-                            Button(action: { participa.toggle() }) {
-                                Text("Cancelar")
-                                    .bold()
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.red)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(10)
-                                    .shadow(color: Color.black.opacity(0.5), radius: 2, x: 1, y: 1)
+                            .sheet(isPresented: $asistenciaModal) {
+                                RegistrarAsistenciaModalView(event: event, isPresented: $asistenciaModal, participa: Binding(get: { participa ?? false }, set: { participa = $0 }))
+
+
                             }
+
+
+
                         }
                     } else {
-                        Button(action: { participa.toggle() }) {
+                        Button(action: {
+                            Task {
+                                    do {
+                                        let success = try await registerAttendance(usuarioID: 1, eventoID: event.ID_EVENTO)
+                                        if success {
+                                            participa = false
+                                        } else {
+                                            print("Failed to register attendance.")
+                                        }
+                                    } catch {
+                                        print("Error: \(error.localizedDescription)")
+                                    }
+                                }
+}) {
                             Text("Participar")
                                 .font(.title)
                                 .fontWeight(.heavy)
@@ -165,11 +188,130 @@ struct EventDetailView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 0)
             }
+                    
         }
+        .navigationBarBackButtonHidden(true) // Ocultar el botón de regreso predeterminado
+        .navigationBarItems(leading: Button(action: {
+                presentationMode.wrappedValue.dismiss()
+            }) {
+                HStack {
+                    Image(systemName: "chevron.backward") // Cambia esto por el ícono que desees
+                        .font(.system(size: 20))
+                        .foregroundColor(whiteC)// Ajusta el tamaño del ícono según sea necesario
+                    Text("Volver")
+                        .font(.headline)
+                    .foregroundColor(whiteC)// Puedes ajustar la fuente según tus preferencias
+                }
+            })
         .navigationBarTitle("", displayMode: .inline)
+        .onAppear {
+            Task {
+                do {
+                    let fetchedStatus = try await checkAttendance(usuarioID: 1, eventoID: event.ID_EVENTO)
+                    participa = fetchedStatus  // Set the attendance status
+
+                    // Safely unwrap fetchedStatus
+                    if let unwrappedStatus = fetchedStatus {
+                        print("Participation status: \(unwrappedStatus ? "Attended" : "Not Attended")")
+                    } else {
+                        print("Participation status is nil or user not registered")
+                    }
+                } catch {
+                    errorMessage = "Failed to fetch attendance status: \(error.localizedDescription)"
+                    participa = nil  // Reset the attendance status in case of error
+                    print("Error fetching attendance status: \(error.localizedDescription)")
+                }
+            }
+        }
     }
-    
 }
+
+struct RegistrarAsistenciaModalView: View {
+    var event: EVENTOS
+    @Binding var isPresented: Bool  // Use a binding to control the modal visibility
+    @State private var codigoValidacion: String = ""
+    @Binding var participa: Bool
+    @State private var message1: String = ""  // Control for showing the modal
+    @State private var showAlert: Bool = false  // Control for showing the modal
+    
+    var body: some View {
+        ZStack {
+            Color(lightGreenC)
+                .ignoresSafeArea(.all)
+            
+            VStack {
+                // Stylish rectangle containing "Registro de Asistencia" and event name
+                VStack {
+                    Text("Registro de Asistencia")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text(event.NOMBRE)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+                .padding()
+                .background(darkBlueC)  // Set background color
+                .cornerRadius(15)         // Rounded corners
+                .shadow(radius: 5)        // Add shadow for the stylish look
+                
+                // Input for validation code
+                TextField("Código de validación", text: $codigoValidacion)
+                    .keyboardType(.default)  // Keyboard suited for number input
+                    .font(.system(size: 15))
+                    .frame(width: 200)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding()
+                
+                HStack {
+                    Button("Registrar") {
+                            let attendance = AttendanceRequest(usuario_id: 1, evento_id: event.ID_EVENTO, event_name: event.NOMBRE, event_code: codigoValidacion)
+
+                            registerEventCompletion(attendance: attendance) { result in
+                                switch result {
+                                case .success(let message):
+                                    print("Success: \(message)")
+                                message1 = "Asistenica registrada con exito"
+                                    showAlert = true
+                                   participa = true
+                                case .failure(let error):
+                                    message1 = "Codigo incorrecto"
+                                    print("Error: \(error.localizedDescription)")
+                                    showAlert = true
+                                }
+                            }
+                            print("Código ingresado: \(codigoValidacion)")
+                        
+                    }
+                    .padding()
+                    .foregroundColor(.white)
+                    .background(Color.blue)
+                    .cornerRadius(10)
+                    
+                    Button("Cerrar") {
+                        isPresented = false  // Close the modal when the button is pressed
+                    }
+                    .padding()
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+            }
+            .padding()
+        }
+        .alert( isPresented: $showAlert) {
+                Alert(
+                    title: Text(message1),
+                    dismissButton: .default(Text("Ok")) {
+                        showAlert = false
+                    }
+                )
+            
+            }
+    }
+}
+
 struct EventDetailView_Previews: PreviewProvider {
     static var previews: some View {
         EventDetailView(event: exampleEvent)
